@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950 text-slate-100 dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lemtech - Monitoreo en Tiempo Real</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        noc: {
+                            bg: '#090d16',
+                            card: '#111827',
+                            border: '#1f2937',
+                            accent: '#6366f1'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+        }
+
+        /* High contrast NOC pulse animations */
+        @keyframes noc-critical-pulse {
+            0%, 100% { border-color: rgba(244, 63, 94, 0.9); box-shadow: 0 0 15px rgba(244, 63, 94, 0.4); }
+            50% { border-color: rgba(244, 63, 94, 0.3); box-shadow: 0 0 4px rgba(244, 63, 94, 0.1); }
+        }
+
+        .border-critical-pulse {
+            animation: noc-critical-pulse 1.5s infinite;
+        }
+
+        .custom-scroll::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(71, 85, 105, 0.6);
+            border-radius: 3px;
+        }
+
+        /* Micro Sparkline rendering */
+        .sparkline-bar {
+            transition: height 0.3s ease;
+        }
+
+        /* ===== TEMA CLARO =====
+           La interfaz usa colores slate fijos (oscuros), por eso el tema claro
+           se logra sobrescribiendo esos colores cuando <html> tiene la clase "light-theme". */
+        html.light-theme, html.light-theme body { background-color: #f1f5f9 !important; color: #0f172a !important; }
+        html.light-theme .bg-slate-950 { background-color: #f1f5f9 !important; }
+        html.light-theme .bg-slate-900 { background-color: #ffffff !important; }
+        html.light-theme .bg-slate-800 { background-color: #e2e8f0 !important; }
+        html.light-theme [class*="bg-slate-950/"] { background-color: rgba(241, 245, 249, 0.92) !important; }
+        html.light-theme [class*="bg-slate-900/"] { background-color: rgba(255, 255, 255, 0.92) !important; }
+        html.light-theme [class*="hover:bg-slate-"]:hover { background-color: #e2e8f0 !important; }
+        html.light-theme [class*="border-slate-"] { border-color: #cbd5e1 !important; }
+        html.light-theme .divide-slate-800 > :not([hidden]) ~ :not([hidden]),
+        html.light-theme .divide-slate-800\/80 > :not([hidden]) ~ :not([hidden]) { border-color: #cbd5e1 !important; }
+        html.light-theme .text-slate-100, html.light-theme .text-slate-200 { color: #0f172a !important; }
+        html.light-theme .text-slate-300 { color: #334155 !important; }
+        html.light-theme .text-slate-400 { color: #475569 !important; }
+        html.light-theme .text-slate-500, html.light-theme .text-slate-600 { color: #64748b !important; }
+        html.light-theme .text-emerald-400 { color: #047857 !important; }
+        html.light-theme .text-rose-400, html.light-theme .text-rose-300 { color: #be123c !important; }
+        html.light-theme .text-amber-400 { color: #b45309 !important; }
+        html.light-theme .text-indigo-300, html.light-theme .text-indigo-400 { color: #4338ca !important; }
+        html.light-theme [class*="bg-emerald-950"] { background-color: #d1fae5 !important; }
+        html.light-theme [class*="bg-amber-950"] { background-color: #fef3c7 !important; }
+        html.light-theme [class*="bg-rose-950"] { background-color: #ffe4e6 !important; }
+        html.light-theme [class*="bg-indigo-950"] { background-color: #e0e7ff !important; }
+        html.light-theme .bg-indigo-600 .text-white, html.light-theme .text-white { color: #ffffff !important; }
+        html.light-theme .bg-slate-800.text-white, html.light-theme .bg-slate-800 .text-white { color: #0f172a !important; }
+        html.light-theme .custom-scroll::-webkit-scrollbar-track { background: #e2e8f0; }
+        html.light-theme .custom-scroll::-webkit-scrollbar-thumb { background: #94a3b8; }
+        html.light-theme input, html.light-theme select, html.light-theme textarea { color: #0f172a !important; }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col bg-slate-950 text-slate-100 antialiased font-sans transition-colors duration-200">
+    <!-- TOP NOC WALLBOARD HEADER -->
+    <header class="border-b border-slate-800 bg-slate-900/90 sticky top-0 z-30 backdrop-blur-md">
+       <div class="max-w-[1920px] mx-auto px-4 h-14 flex items-center justify-between">
+            <!-- Left: Brand + Status -->
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-base shadow-lg shadow-indigo-500/30">
+                        <i class="fa-solid fa-wheat-awn"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-black text-slate-100 text-base tracking-wider uppercase">Lemtech</span>
+                            <span class="text-[10px] bg-indigo-500/20 text-indigo-300 font-extrabold px-2 py-0.5 rounded border border-indigo-500/30">
+                                WALLBOARD 4K
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WebSocket Connection Status Indicator -->
+                <div class="hidden md:flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-xs">
+                    <span id="ws-status-dot" class="relative flex h-2.5 w-2.5">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <span id="ws-status-text" class="font-mono text-[11px] font-bold text-emerald-400 uppercase">WS SIMULADO EN VIVO</span>
+                </div>
+            </div>
+
+            <!-- Center: Live Clock & Global Counters -->
+            <div class="hidden lg:flex items-center space-x-6">
+                <!-- Clock -->
+                <div class="flex items-center space-x-2 font-mono bg-slate-950 px-3 py-1 rounded-md border border-slate-800 text-xs font-bold text-slate-300">
+                    <i class="fa-regular fa-clock text-indigo-400"></i>
+                    <span id="live-clock">--:--:--</span>
+                </div>
+
+                <!-- Metrics bar -->
+                <div class="flex items-center space-x-2 text-xs font-bold">
+                    <div class="bg-slate-950 border border-slate-800 px-3 py-1 rounded-md flex items-center gap-2">
+                        <span class="text-slate-400">Campos:</span>
+                        <span id="summary-campos" class="text-slate-100 font-extrabold">0</span>
+                    </div>
+                    <div class="bg-emerald-950/40 border border-emerald-800/60 text-emerald-400 px-3 py-1 rounded-md flex items-center gap-2">
+                        <span>100% OK:</span>
+                        <span id="summary-ok" class="font-black text-sm">0</span>
+                    </div>
+                    <div class="bg-amber-950/40 border border-amber-800/60 text-amber-400 px-3 py-1 rounded-md flex items-center gap-2">
+                        <span>Parcial:</span>
+                        <span id="summary-parcial" class="font-black text-sm">0</span>
+                    </div>
+                    <div class="bg-rose-950/40 border border-rose-800/60 text-rose-400 px-3 py-1 rounded-md flex items-center gap-2">
+                        <span>Crítico (&ge;25%):</span>
+                        <span id="summary-critico" class="font-black text-sm">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Controls (Sound, WS Settings, Theme) -->
+            <div class="flex items-center space-x-2">
+                <!-- Audio Alert Toggle -->
+                <button id="btn-audio-toggle" onclick="toggleAudioAlerts()" class="px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-100 text-xs font-semibold flex items-center gap-1.5 transition">
+                    <i id="audio-icon" class="fa-solid fa-volume-xmark text-rose-400"></i>
+                    <span id="audio-status-text" class="hidden sm:inline">Audio MUTE</span>
+                </button>
+
+                <!-- WS Config Modal Trigger -->
+                <button onclick="toggleWSModal()" class="px-2.5 py-1.5 rounded-lg border border-indigo-500/40 bg-indigo-950/40 hover:bg-indigo-900/50 text-indigo-300 text-xs font-semibold flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-plug text-xs"></i>
+                    <span class="hidden sm:inline">Config WS</span>
+                </button>
+
+                <!-- Theme Switcher -->
+                <button onclick="toggleTheme()" class="p-1.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-300 hover:text-white transition">
+                    <i id="theme-icon" class="fa-solid fa-moon text-sm"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN BODY CONTAINER -->
+    <div class="max-w-[1920px] mx-auto px-3 py-2 flex-1 min-h-0 w-full flex flex-col space-y-2">
+
+        <!-- CONTROLS & LAYOUT BAR -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+            
+            <!-- Mode Switcher -->
+            <div class="flex items-center space-x-2">
+                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider mr-1 hidden sm:inline">Modo:</span>
+                <div class="bg-slate-950 p-1 rounded-lg border border-slate-800 flex items-center space-x-1">
+                    <button id="btn-mode-grid" onclick="setMode('grid')" class="px-3 py-1.5 rounded-md text-xs font-extrabold flex items-center gap-2 transition bg-indigo-600 text-white shadow-md">
+                        <i class="fa-solid fa-border-all"></i>
+                        <span>Vista Grilla / Columnas</span>
+                    </button>
+                    <button id="btn-mode-list" onclick="setMode('list')" class="px-3 py-1.5 rounded-md text-xs font-extrabold flex items-center gap-2 transition text-slate-400 hover:text-slate-100">
+                        <i class="fa-solid fa-list-ul"></i>
+                        <span>Vista Lista / Tabla</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filters and Search -->
+            <div class="flex items-center space-x-3 w-full md:w-auto">
+                <!-- Search Box -->
+                <div class="relative flex-1 md:w-64">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                    <input type="text" id="input-search" oninput="render()" placeholder="Buscar campo o dispositivo..." 
+                        class="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <!-- Status Filter Chips -->
+                <div class="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs font-semibold">
+                    <button onclick="setFilter('todos')" id="filter-todos" class="px-2.5 py-1 rounded bg-slate-800 text-white">Todos</button>
+                    <button onclick="setFilter('criticos')" id="filter-criticos" class="px-2.5 py-1 rounded text-rose-400 hover:bg-slate-900">Rojo (&ge;25%)</button>
+                    <button onclick="setFilter('parciales')" id="filter-parciales" class="px-2.5 py-1 rounded text-amber-400 hover:bg-slate-900">Amarillo</button>
+                    <button onclick="setFilter('ok')" id="filter-ok" class="px-2.5 py-1 rounded text-emerald-400 hover:bg-slate-900">Verde (100% OK)</button>
+                </div>
+
+                <!-- Manual Trigger Event Button -->
+                <button onclick="triggerSimulatedFail()" title="Simular evento de desconexión en vivo" class="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 text-xs font-bold flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-bolt text-rose-400"></i>
+                    <span class="hidden lg:inline">Simular Evento</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- MODE 1: HIGH DENSITY GRID / COLUMNS VIEW -->
+        <div id="view-grid" class="grid gap-2 flex-1 min-h-0">    <!-- Dynamic Campo Grid Cards -->
+        </div>
+
+        <!-- MODE 2: EXACT LIST / TABLE VIEW -->
+        <div id="view-list" class="hidden bg-slate-900/80 border border-slate-800 rounded-xl overflow-y-auto flex-1 min-h-0 shadow-xl">
+            <div class="overflow-x-auto custom-scroll">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-950/80 text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                            <th class="py-3 px-4">CAMPO</th>
+                            <th class="py-3 px-4 text-center">TOTAL EQUIPOS</th>
+                            <th class="py-3 px-4 text-center">EQUIPOS CAÍDOS</th>
+                            <th class="py-3 px-4 text-center">ESTADO COLOR</th>
+                            <th class="py-3 px-4">TIEMPO REAL / ÚLTIMA SEÑAL</th>
+                            <th class="py-3 px-4 text-right">ACCIONES</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-slate-800/80 text-xs font-medium">
+                        <!-- Dynamic Rows -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- LIVE EVENT LOG (NOC ALERTS FOOTER PANEL) -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 shadow-lg">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center space-x-2">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                    </span>
+                    <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-300">Logs de Eventos en Tiempo Real (Telemetría NOC)</h3>
+                </div>
+                <button onclick="clearLogs()" class="text-[10px] text-slate-500 hover:text-slate-300 font-bold uppercase tracking-wider">Limpiar Consola</button>
+            </div>
+
+            <!-- Terminal Log Window -->
+            <div id="log-console" class="h-14 overflow-y-auto custom-scroll font-mono text-[11px] space-y-1 bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
+                <!-- Log Entries -->
+            </div>
+        </div>
+    </div>
+
+    <!-- EQUIPMENT BREAKDOWN DRAWER / MODAL -->
+    <div id="drawer-backdrop" onclick="closeDrawer()" class="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 hidden transition-opacity"></div>
+    <aside id="drawer" class="fixed top-0 right-0 bottom-0 w-full max-w-2xl bg-slate-900 border-l border-slate-800 z-50 transform translate-x-full transition-transform duration-300 ease-in-out shadow-2xl flex flex-col">
+        
+        <!-- Drawer Header -->
+        <div class="p-5 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
+            <div>
+                <div class="flex items-center space-x-3">
+                    <span id="d-status-badge" class="px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">VERDE</span>
+                    <h2 id="d-title" class="text-lg font-black text-slate-100 tracking-tight">Campo</h2>
+                </div>
+                <p id="d-subtitle" class="text-xs text-slate-400 mt-0.5 font-medium">Desglose de dispositivos IoT</p>
+            </div>
+            <button onclick="closeDrawer()" class="text-slate-400 hover:text-white p-2 rounded-lg bg-slate-900 border border-slate-800">
+                <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+        </div>
+
+        <!-- Drawer Quick Stats -->
+        <div class="grid grid-cols-4 divide-x divide-slate-800 border-b border-slate-800 bg-slate-900/50 py-3 text-center text-xs">
+            <div>
+                <span class="text-[10px] font-bold uppercase text-slate-400 block">Total</span>
+                <span id="d-stat-total" class="font-black text-base text-slate-100">0</span>
+            </div>
+            <div>
+                <span class="text-[10px] font-bold uppercase text-slate-400 block">Online</span>
+                <span id="d-stat-ok" class="font-black text-base text-emerald-400">0</span>
+            </div>
+            <div>
+                <span class="text-[10px] font-bold uppercase text-slate-400 block">Caídos</span>
+                <span id="d-stat-down" class="font-black text-base text-rose-400">0</span>
+            </div>
+            <div>
+                <span class="text-[10px] font-bold uppercase text-slate-400 block">Latencia Media</span>
+                <span id="d-stat-latency" class="font-black text-base text-indigo-400">24 ms</span>
+            </div>
+        </div>
+
+        <!-- Equipment List -->
+        <div class="p-5 overflow-y-auto flex-1 custom-scroll space-y-3 bg-slate-950/40">
+            <div class="flex items-center justify-between text-xs mb-1">
+                <span class="font-extrabold uppercase tracking-wider text-slate-400">Equipos Instalados en Campo</span>
+                <span class="text-[10px] text-slate-500 font-mono">Telemetry Live Feed</span>
+            </div>
+
+            <div id="d-equipment-container" class="space-y-2.5">
+                <!-- Equipment items injected here -->
+            </div>
+        </div>
+
+        <!-- Drawer Footer -->
+        <div class="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between text-xs">
+            <span class="text-slate-500 font-mono">ID Nodo: <span id="d-campo-id">--</span></span>
+            <button onclick="closeDrawer()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg transition">
+                Cerrar Panel
+            </button>
+        </div>
+    </aside>
+
+    <!-- WEBSOCKET CONFIGURATION MODAL -->
+    <div id="ws-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-lg overflow-hidden shadow-2xl">
+            <div class="p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-network-wired text-indigo-400"></i>
+                    <h3 class="font-extrabold text-sm text-slate-100">Configuración de Servidor WebSocket Real</h3>
+                </div>
+                <button onclick="toggleWSModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="p-5 space-y-4 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-300 mb-1">Modo de Telemetría</label>
+                    <select id="ws-mode-select" onchange="switchWSMode(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:border-indigo-500 font-semibold">
+                        <option value="simulated">Motor Simulado Integrado (Auto-Eventos cada 4s)</option>
+                        <option value="real">Servidor WebSocket Personalizado (ws:// o wss://)</option>
+                    </select>
+                </div>
+
+                <div id="real-ws-fields" class="space-y-3 hidden">
+                    <div>
+                        <label class="block font-bold text-slate-300 mb-1">URL del WebSocket</label>
+                        <input type="text" id="ws-url-input" placeholder="wss://mi-servidor-iot.com/telemetria" value="wss://echo.websocket.org" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 font-mono text-slate-200 focus:border-indigo-500">
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-300 mb-1">Estructura JSON esperada (Decodificador)</label>
+                        <textarea id="ws-json-schema" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 font-mono text-[10px] text-indigo-300 leading-normal" readonly>{
+  "campoId": "los-alerces",
+  "deviceId": "DEV-02",
+  "status": "OFFLINE", // o "ONLINE"
+  "latencyMs": 42
+}</textarea>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-indigo-950/30 border border-indigo-800/40 rounded-lg text-indigo-300 leading-relaxed text-[11px]">
+                    <i class="fa-solid fa-circle-info mr-1"></i>
+                    En modo <b>Simulado</b> el motor genera alertas aleatorias reales para probar pantallas NOC. Al conectar un servidor real, los paquetes JSON entrantes actualizarán la interfaz al instante.
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-slate-800 bg-slate-950 flex justify-end space-x-2">
+                <button onclick="toggleWSModal()" class="px-4 py-1.5 rounded-lg bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 text-xs">Cancelar</button>
+                <button onclick="saveWSConfig()" class="px-4 py-1.5 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-500 text-xs">Aplicar y Conectar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT APPLICATION LOGIC -->
+    <script>
+        // High-Density NOC Fields & Equipment Initial Dataset
+        let campos = [
+            
+        ];
+
+        // System Global State
+        let currentMode = 'grid'; // 'grid' | 'list'
+        let currentFilter = 'todos'; // 'todos' | 'criticos' | 'parciales' | 'ok'
+        let audioMuted = true;
+        let wsMode = 'api'; // 'simulated' | 'real'
+        let realWS = null;
+        let activeCampoIdForDrawer = null;
+        let nodosDrawer = [];
+
+async function cargarNodos(idCampo) {
+    try {
+        const resp = await fetch(`/api/campos/${idCampo}/nodos`);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        nodosDrawer = await resp.json();
+    } catch (e) {
+        console.error('No se pudieron cargar los equipos', e);
+        nodosDrawer = [];
+    }
+    updateDrawerData();
+}
+
+function formatearTiempo(min) {
+    if (min === null || min === undefined) return 'Nunca transmitió';
+    if (min < 60) return `hace ${min} min`;
+    if (min < 1440) return `hace ${Math.floor(min / 60)} h`;
+    return `hace ${Math.floor(min / 1440)} d`;
+}
+        // Sound Synthesizer (Web Audio API - No External Assets)
+        function playAlertTone() {
+            if (audioMuted) return;
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                const ctx = new AudioCtx();
+                
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+                osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3); // A4
+                
+                gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.start();
+                osc.stop(ctx.currentTime + 0.3);
+            } catch (e) {
+                console.warn("Audio Context error:", e);
+            }
+        }
+
+        function toggleAudioAlerts() {
+            audioMuted = !audioMuted;
+            const btnIcon = document.getElementById('audio-icon');
+            const btnText = document.getElementById('audio-status-text');
+
+            if (audioMuted) {
+                btnIcon.className = "fa-solid fa-volume-xmark text-rose-400";
+                btnText.innerText = "Audio MUTE";
+            } else {
+                btnIcon.className = "fa-solid fa-volume-high text-emerald-400 animate-pulse";
+                btnText.innerText = "Audio ACTIVO";
+                playAlertTone();
+            }
+        }
+
+        // Calculation Logic for Status / Colors
+        function computeCampoMetrics(campo) {
+            const total = campo.total !== undefined ? campo.total : campo.devices.length;
+const caidos = campo.caidos !== undefined ? campo.caidos : campo.devices.filter(d => d.status === 'OFFLINE').length;
+            const ratio = total > 0 ? (caidos / total) : 0;
+
+            let colorKey = 'VERDE'; // VERDE (100% OK), AMARILLO (<25%), ROJO (>=25%)
+            let badgeBg = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
+            let dotBg = 'bg-emerald-500';
+            let cardBorder = 'border-slate-800 hover:border-slate-700';
+
+            if (caidos > 0) {
+                if (ratio >= 0.25) {
+                    colorKey = 'ROJO';
+                    badgeBg = 'bg-rose-500/20 text-rose-400 border-rose-500/50';
+                    dotBg = 'bg-rose-500';
+                    cardBorder = 'border-rose-500/80 border-critical-pulse';
+                } else {
+                    colorKey = 'AMARILLO';
+                    badgeBg = 'bg-amber-500/20 text-amber-400 border-amber-500/40';
+                    dotBg = 'bg-amber-500';
+                    cardBorder = 'border-amber-500/60';
+                }
+            }
+
+            return { total, caidos, ratio, colorKey, badgeBg, dotBg, cardBorder };
+        }
+
+        // Live Clock
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('live-clock').innerText = now.toLocaleTimeString('es-CL');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Logging Console Helper
+        function addLog(msg, type = 'info') {
+            const consoleEl = document.getElementById('log-console');
+            const now = new Date().toLocaleTimeString('es-CL');
+            const entry = document.createElement('div');
+            
+            let colorClass = 'text-slate-400';
+            if (type === 'danger') colorClass = 'text-rose-400 font-bold';
+            if (type === 'success') colorClass = 'text-emerald-400 font-bold';
+            if (type === 'warning') colorClass = 'text-amber-400 font-bold';
+
+            entry.className = `flex items-center space-x-2 ${colorClass}`;
+            entry.innerHTML = `<span class="text-slate-600 font-mono text-[10px]">[${now}]</span> <span>${msg}</span>`;
+
+            consoleEl.prepend(entry);
+        }
+
+        function clearLogs() {
+            document.getElementById('log-console').innerHTML = '<div class="text-slate-600 italic text-[10px]">Consola reiniciada...</div>';
+        }
+                // Calcula cuántas columnas y filas usar para que todas las tarjetas quepan sin scroll
+        function ajustarGrilla(cantidad) {
+            const grid = document.getElementById('view-grid');
+            const w = grid.clientWidth;
+            const h = grid.clientHeight;
+            if (cantidad === 0 || !w || !h) return;
+
+            let mejorCols = 1;
+            let mejorTamano = 0;
+            for (let cols = 1; cols <= cantidad; cols++) {
+                const filas = Math.ceil(cantidad / cols);
+                // Tarjeta ideal: algo más ancha que alta (relación 1.6 : 1)
+                const tamano = Math.min((w / cols) / 1.6, h / filas);
+                if (tamano > mejorTamano) {
+                    mejorTamano = tamano;
+                    mejorCols = cols;
+                }
+            }
+            const filas = Math.ceil(cantidad / mejorCols);
+            grid.style.gridTemplateColumns = `repeat(${mejorCols}, minmax(0, 1fr))`;
+            grid.style.gridTemplateRows = `repeat(${filas}, minmax(0, 1fr))`;
+        }
+        window.addEventListener('resize', () => render());
+        // MAIN RENDER FUNCTION
+        function render() {
+            const query = document.getElementById('input-search').value.toLowerCase();
+
+            // Filter Dataset
+            const filteredCampos = campos.filter(c => {
+                const metrics = computeCampoMetrics(c);
+                const matchQuery = c.nombre.toLowerCase().includes(query)
+                    || c.zona.toLowerCase().includes(query)
+                    || String(c.idEmpresa ?? '').includes(query)
+                    || String(c.codigos ?? '').toLowerCase().includes(query)
+                    || String(c.sectores ?? '').toLowerCase().includes(query);
+                
+                if (currentFilter === 'criticos') return matchQuery && metrics.colorKey === 'ROJO';
+                if (currentFilter === 'parciales') return matchQuery && metrics.colorKey === 'AMARILLO';
+                if (currentFilter === 'ok') return matchQuery && metrics.colorKey === 'VERDE';
+                return matchQuery;
+            });
+
+            // Orden: operatividad de la más baja a la más alta (los más críticos primero)
+            const operatividad = c => {
+                const m = computeCampoMetrics(c);
+                return m.total > 0 ? (m.total - m.caidos) / m.total : 1;
+            };
+            filteredCampos.sort((a, b) =>
+                operatividad(a) - operatividad(b)
+                || computeCampoMetrics(b).caidos - computeCampoMetrics(a).caidos
+                || a.nombre.localeCompare(b.nombre, 'es'));
+
+            // Global Metrics Update
+            let countOk = 0;
+            let countParcial = 0;
+            let countCritico = 0;
+
+            campos.forEach(c => {
+                const m = computeCampoMetrics(c);
+                if (m.colorKey === 'VERDE') countOk++;
+                if (m.colorKey === 'AMARILLO') countParcial++;
+                if (m.colorKey === 'ROJO') countCritico++;
+            });
+
+            document.getElementById('summary-campos').innerText = campos.length;
+            document.getElementById('summary-ok').innerText = countOk;
+            document.getElementById('summary-parcial').innerText = countParcial;
+            document.getElementById('summary-critico').innerText = countCritico;
+
+            // RENDER MODE 1: GRID
+                        // RENDER MODE 1: GRID (tarjetas compactas)
+            const gridContainer = document.getElementById('view-grid');
+            gridContainer.innerHTML = '';
+
+            filteredCampos.forEach(c => {
+                const m = computeCampoMetrics(c);
+                const percentOk = m.total > 0 ? Math.round(((m.total - m.caidos) / m.total) * 100) : 100;
+
+                const card = document.createElement('div');
+                card.className = `bg-slate-900 rounded-lg border p-2 shadow cursor-pointer min-h-0 overflow-hidden flex flex-col justify-between transition ${m.cardBorder}`;
+                card.onclick = () => openDrawer(c.id);
+
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-1">
+                        <div class="min-w-0">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block truncate">${c.zona}</span>
+                            <h3 class="font-extrabold text-slate-100 text-xs leading-tight truncate">${c.nombre}</h3>
+                            <p class="text-[10px] text-indigo-300 font-mono leading-none truncate" title="${c.codigos ?? ''}">Emp. ${c.idEmpresa ?? '--'} · ${c.sectores ?? '--'}</p>
+                        </div>
+                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-black uppercase ${m.badgeBg}">
+                            <span class="w-1.5 h-1.5 rounded-full ${m.dotBg}"></span>${m.colorKey}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-1 text-center my-1">
+                        <div class="bg-slate-950 rounded border border-slate-800 py-0.5">
+                            <span class="text-[8px] font-extrabold text-slate-500 uppercase block">Equipos</span>
+                            <span class="text-sm font-black text-slate-200">${m.total}</span>
+                        </div>
+                        <div class="bg-slate-950 rounded border border-slate-800 py-0.5">
+                            <span class="text-[8px] font-extrabold text-slate-500 uppercase block">Caídos</span>
+                            <span class="text-sm font-black ${m.caidos > 0 ? 'text-rose-400' : 'text-emerald-400'}">${m.caidos}</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between text-[9px] font-bold text-slate-400 mb-0.5">
+                            <span>Operatividad</span>
+                            <span class="${m.caidos > 0 ? (m.colorKey === 'ROJO' ? 'text-rose-400' : 'text-amber-400') : 'text-emerald-400'}">${percentOk}%</span>
+                        </div>
+                        <div class="w-full bg-slate-950 h-1 rounded-full overflow-hidden border border-slate-800/60">
+                            <div class="h-full ${m.colorKey === 'ROJO' ? 'bg-rose-500' : (m.colorKey === 'AMARILLO' ? 'bg-amber-500' : 'bg-emerald-500')}" style="width: ${percentOk}%"></div>
+                        </div>
+                    </div>
+                `;
+                gridContainer.appendChild(card);
+            });
+
+            ajustarGrilla(filteredCampos.length);
+
+            // RENDER MODE 2: EXACT LIST / TABLE
+            const tableBody = document.getElementById('table-body');
+            tableBody.innerHTML = '';
+
+            filteredCampos.forEach(c => {
+                const m = computeCampoMetrics(c);
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/40 transition cursor-pointer";
+                tr.onclick = () => openDrawer(c.id);
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4">
+                        <div class="font-extrabold text-slate-100 text-sm">${c.nombre}</div>
+                        <div class="text-[10px] text-slate-500 uppercase font-semibold mt-0.5">${c.zona} · Emp. ${c.idEmpresa ?? '--'} · ${c.sectores ?? '--'}</div>
+                    </td>
+
+                    <td class="py-3 px-4 text-center">
+                        <span class="inline-block bg-slate-950 font-black text-slate-200 px-3 py-1 rounded-md text-xs border border-slate-800">
+                            ${m.total} equipos
+                        </span>
+                    </td>
+
+                    <td class="py-3 px-4 text-center">
+                        ${m.caidos > 0 ? 
+                            `<span class="inline-flex items-center gap-1.5 bg-rose-950/60 text-rose-400 font-black px-3 py-1 rounded-md text-xs border border-rose-800/60">
+                                <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
+                                ${m.caidos} caídos
+                            </span>` : 
+                            `<span class="inline-block bg-emerald-950/40 text-emerald-400 font-bold px-3 py-1 rounded-md text-xs border border-emerald-800/40">
+                                0 caídos
+                            </span>`
+                        }
+                    </td>
+
+                    <td class="py-3 px-4 text-center">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded border text-xs font-black uppercase tracking-wider ${m.badgeBg}">
+                            <span class="w-2 h-2 rounded-full ${m.dotBg}"></span>
+                            ${m.colorKey}
+                        </span>
+                    </td>
+
+                    <td class="py-3 px-4 text-slate-400 font-mono text-xs">
+                        <span class="inline-flex items-center text-emerald-400 gap-1 font-bold">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            En línea
+                        </span>
+                        <span class="text-slate-500 text-[11px] block">Última señal: Hace &lt;1s</span>
+                    </td>
+
+                    <td class="py-3 px-4 text-right">
+                        <button class="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 px-3 py-1 rounded-lg font-bold text-xs transition">
+                            Desglose <i class="fa-solid fa-chevron-right text-[10px] ml-1"></i>
+                        </button>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+
+            // Update Drawer if open
+            if (activeCampoIdForDrawer) {
+                updateDrawerData();
+            }
+        }
+
+        // DRAWER LOGIC (Equipment Breakdown Modal)
+       function openDrawer(idCampo) {
+    activeCampoIdForDrawer = idCampo;
+    nodosDrawer = [];
+    updateDrawerData();
+    cargarNodos(idCampo);
+    document.getElementById('drawer-backdrop').classList.remove('hidden');
+    document.getElementById('drawer').classList.remove('translate-x-full');
+}
+
+        // Tarjeta de un equipo dentro del panel lateral
+        function crearTarjetaNodo(n) {
+            const isOffline = n.estado === 'OFFLINE';
+            const card = document.createElement('div');
+            card.className = `p-3.5 rounded-xl border text-xs flex items-center justify-between ${
+                isOffline ? 'bg-rose-950/20 border-rose-800/60' : 'bg-slate-900 border-slate-800'
+            }`;
+            card.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
+                        isOffline ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-slate-950 text-indigo-400 border border-slate-800'
+                    }">
+                        <i class="fa-solid fa-microchip"></i>
+                    </div>
+                    <div>
+                        <div class="font-bold text-slate-100 text-sm">${n.nombre ?? 'Sin nombre'}</div>
+                        <div class="text-slate-500 font-mono text-[10px] mt-0.5 flex flex-wrap items-center gap-x-2">
+                            <span>ID: ${n.idNodo}</span>
+                            <span>•</span>
+                            <span>Tipo: ${n.tipoNodo}</span>
+                            ${n.categoria ? `<span>•</span><span>${n.categoria}</span>` : ''}
+                            ${n.conectividad ? `<span>•</span><span>${n.conectividad}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase border ${
+                        isOffline ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                    }">${n.estado}</span>
+                    <div class="text-[10px] text-slate-500 font-mono mt-0.5">${formatearTiempo(n.minutosSinSenal)}</div>
+                </div>
+            `;
+            return card;
+        }
+
+        function updateDrawerData() {
+            const campo = campos.find(c => c.id === activeCampoIdForDrawer);
+            if (!campo) return;
+
+            const m = computeCampoMetrics(campo);
+            const total = nodosDrawer.length;
+            const caidos = nodosDrawer.filter(n => n.estado === 'OFFLINE').length;
+
+            document.getElementById('d-title').innerText = campo.nombre;
+            document.getElementById('d-subtitle').innerText =
+                `Empresa ${campo.idEmpresa} • ${campo.cantidadSectores} ${campo.cantidadSectores === 1 ? 'sector' : 'sectores'}: ${campo.sectores}`;
+            document.getElementById('d-campo-id').innerText = campo.codigos;
+
+            const badge = document.getElementById('d-status-badge');
+            badge.innerText = m.colorKey;
+            badge.className = `px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${m.badgeBg}`;
+
+            document.getElementById('d-stat-total').innerText = total;
+            document.getElementById('d-stat-ok').innerText = total - caidos;
+            document.getElementById('d-stat-down').innerText = caidos;
+            document.getElementById('d-stat-latency').innerText = '--';
+
+            const container = document.getElementById('d-equipment-container');
+            container.innerHTML = '';
+
+            if (total === 0) {
+                container.innerHTML = '<div class="text-xs text-slate-500 text-center py-6">Sin equipos para mostrar</div>';
+                return;
+            }
+
+            // Agrupar los equipos por sector (el servidor ya los entrega ordenados por sector)
+            const grupos = new Map();
+            nodosDrawer.forEach(n => {
+                if (!grupos.has(n.idSector)) {
+                    grupos.set(n.idSector, {
+                        nombre: n.nombreSector || n.codigoSector || ('Sector ' + n.idSector),
+                        codigo: n.codigoSector,
+                        nodos: []
+                    });
+                }
+                grupos.get(n.idSector).nodos.push(n);
+            });
+
+            grupos.forEach(g => {
+                const caidosG = g.nodos.filter(n => n.estado === 'OFFLINE').length;
+                const online = g.nodos.length - caidosG;
+
+                const cabecera = document.createElement('div');
+                cabecera.className = 'flex items-center justify-between pt-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-400';
+                cabecera.innerHTML = `
+                    <span>${g.nombre}${g.codigo ? ` <span class="font-mono text-slate-500 normal-case">(${g.codigo})</span>` : ''}</span>
+                    <span class="${caidosG > 0 ? 'text-rose-400' : 'text-emerald-400'}">${online}/${g.nodos.length} online</span>
+                `;
+                container.appendChild(cabecera);
+
+                g.nodos.forEach(n => container.appendChild(crearTarjetaNodo(n)));
+            });
+        }
+
+        function closeDrawer() {
+            activeCampoIdForDrawer = null;
+            document.getElementById('drawer').classList.add('translate-x-full');
+            document.getElementById('drawer-backdrop').classList.add('hidden');
+        }
+
+        function getDeviceIcon(type) {
+            if (type === 'Gateway') return 'fa-solid fa-tower-cell';
+            if (type === 'Bomba') return 'fa-solid fa-faucet-drip';
+            if (type === 'Caudalímetro') return 'fa-solid fa-gauge-high';
+            if (type === 'Estación Clima') return 'fa-solid fa-cloud-sun-rain';
+            return 'fa-solid fa-microchip';
+        }
+
+        // MODE CONTROLS
+        function setMode(mode) {
+            currentMode = mode;
+            const gridEl = document.getElementById('view-grid');
+            const listEl = document.getElementById('view-list');
+
+            const btnGrid = document.getElementById('btn-mode-grid');
+            const btnList = document.getElementById('btn-mode-list');
+
+            if (mode === 'grid') {
+                gridEl.classList.remove('hidden');
+                listEl.classList.add('hidden');
+                btnGrid.className = "px-3 py-1.5 rounded-md text-xs font-extrabold flex items-center gap-2 transition bg-indigo-600 text-white shadow-md";
+                btnList.className = "px-3 py-1.5 rounded-md text-xs font-extrabold flex items-center gap-2 transition text-slate-400 hover:text-slate-100";
+            } else {
+                gridEl.classList.add('hidden');
+                listEl.classList.remove('hidden');
+                btnList.className = "px-3 py-1.5 rounded-md text-xs font-extrabold flex items-center gap-2 transition bg-indigo-600 text-white shadow-md";
+                btnGrid.className = "px-3 py-1.5 rounded-md text-xs font-extrabold flex items-center gap-2 transition text-slate-400 hover:text-slate-100";
+            }
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('[id^="filter-"]').forEach(btn => {
+                btn.className = "px-2.5 py-1 rounded text-slate-400 hover:bg-slate-900";
+            });
+            document.getElementById(`filter-${filter}`).className = "px-2.5 py-1 rounded bg-slate-800 text-white font-bold";
+            render();
+        }
+
+        // REAL-TIME TELEMETRY ENGINE (SIMULATION + REAL WEBSOCKET)
+        function handleTelemetryPacket(packet) {
+            // Expected JSON Packet Format:
+            // { campoId: "los-alerces", deviceId: "GW-01", status: "OFFLINE", latencyMs: 0 }
+            const campo = campos.find(c => c.id === packet.campoId);
+            if (!campo) return;
+
+            const device = campo.devices.find(d => d.id === packet.deviceId);
+            if (!device) return;
+
+            const previousStatus = device.status;
+            device.status = packet.status;
+            device.latencyMs = packet.status === 'OFFLINE' ? 0 : (packet.latencyMs || Math.floor(Math.random() * 20 + 15));
+
+            // Update sparkline history
+            device.history.shift();
+            device.history.push(device.latencyMs);
+
+            // Trigger Alert if Status Changed
+            if (previousStatus !== packet.status) {
+                if (packet.status === 'OFFLINE') {
+                    addLog(`ALERTA NOC: Dispositivo [${device.name}] en [${campo.nombre}] pasa a OFFLINE`, 'danger');
+                    playAlertTone();
+                } else {
+                    addLog(`RECONEXIÓN: Dispositivo [${device.name}] en [${campo.nombre}] restablecido (ONLINE)`, 'success');
+                }
+            }
+
+            render();
+        }
+
+        // Simulated WebSocket Loop (Every 4 seconds randomly flips a device)
+        setInterval(() => {
+            if (wsMode !== 'simulated') return;
+
+            const randomCampo = campos[Math.floor(Math.random() * campos.length)];
+            const randomDevice = randomCampo.devices[Math.floor(Math.random() * randomCampo.devices.length)];
+            const newStatus = Math.random() > 0.35 ? 'ONLINE' : 'OFFLINE';
+
+            handleTelemetryPacket({
+                campoId: randomCampo.id,
+                deviceId: randomDevice.id,
+                status: newStatus,
+                latencyMs: Math.floor(Math.random() * 30 + 12)
+            });
+        }, 4000);
+
+        // Manual event trigger button
+        function triggerSimulatedFail() {
+            const randomCampo = campos[Math.floor(Math.random() * campos.length)];
+            const randomDevice = randomCampo.devices[Math.floor(Math.random() * randomCampo.devices.length)];
+
+            handleTelemetryPacket({
+                campoId: randomCampo.id,
+                deviceId: randomDevice.id,
+                status: 'OFFLINE',
+                latencyMs: 0
+            });
+        }
+
+        // REAL WEBSOCKET CONFIG MODAL & CONNECTION
+        function toggleWSModal() {
+            const modal = document.getElementById('ws-modal');
+            modal.classList.toggle('hidden');
+        }
+
+        function switchWSMode(val) {
+            const fields = document.getElementById('real-ws-fields');
+            if (val === 'real') {
+                fields.classList.remove('hidden');
+            } else {
+                fields.classList.add('hidden');
+            }
+        }
+
+        function saveWSConfig() {
+            const mode = document.getElementById('ws-mode-select').value;
+            const url = document.getElementById('ws-url-input').value;
+            wsMode = mode;
+
+            const dot = document.getElementById('ws-status-dot');
+            const text = document.getElementById('ws-status-text');
+
+            if (mode === 'real') {
+                if (realWS) realWS.close();
+
+                try {
+                    realWS = new WebSocket(url);
+                    text.innerText = "CONECTANDO A WS REAL...";
+
+                    realWS.onopen = () => {
+                        text.innerText = "WS REAL CONECTADO";
+                        dot.firstElementChild.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+                        addLog(`Servidor WebSocket Real conectado exitosamente a ${url}`, 'success');
+                    };
+
+                    realWS.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            handleTelemetryPacket(data);
+                        } catch (err) {
+                            console.error("Error parsing WS packet", err);
+                        }
+                    };
+
+                    realWS.onerror = () => {
+                        text.innerText = "ERROR EN WS REAL";
+                        addLog(`Falla de conexión en WebSocket Real ${url}`, 'danger');
+                    };
+                } catch (e) {
+                    alert("URL de WebSocket no válida");
+                }
+            } else {
+                if (realWS) realWS.close();
+                text.innerText = "WS SIMULADO EN VIVO";
+                addLog("Motor cambiado a Telemetría Simulada Integrada", 'warning');
+            }
+
+            toggleWSModal();
+        }
+
+        // DARK/LIGHT THEME TOGGLE
+        function aplicarTema(claro) {
+            const html = document.documentElement;
+            const themeIcon = document.getElementById('theme-icon');
+            html.classList.toggle('light-theme', claro);
+            html.classList.toggle('dark', !claro);
+            themeIcon.className = claro
+                ? "fa-solid fa-sun text-amber-500"
+                : "fa-solid fa-moon text-indigo-400";
+            try { localStorage.setItem('tema-monitoreo', claro ? 'claro' : 'oscuro'); } catch (e) {}
+        }
+
+        function toggleTheme() {
+            aplicarTema(!document.documentElement.classList.contains('light-theme'));
+        }
+
+        // Recordar el tema elegido
+        try {
+            if (localStorage.getItem('tema-monitoreo') === 'claro') aplicarTema(true);
+        } catch (e) {}
+
+        // ---- Datos reales desde la API de Spring Boot ----
+async function cargarCampos() {
+    try {
+        const resp = await fetch('/api/campos');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const datos = await resp.json();
+
+        campos = datos
+            .filter(c => c.total > 0)                 // oculta campos sin equipos
+            .map(c => ({
+                id: c.idEmpresa,                      // una tarjeta por empresa
+                idEmpresa: c.idEmpresa,
+                codigos: c.codigos,
+                sectores: c.sectores,
+                cantidadSectores: c.cantidadSectores,
+                nombre: c.nombre,
+                zona: [c.region, c.comuna].filter(Boolean).join(' - '),
+                total: c.total,
+                caidos: c.caidos,
+                devices: []                           // el detalle de equipos viene en el siguiente paso
+            }));
+
+        render();
+    } catch (e) {
+        addLog('No se pudo leer /api/campos: ' + e.message, 'danger');
+    }
+}
+
+cargarCampos();
+setInterval(() => {
+    cargarCampos();
+    if (activeCampoIdForDrawer !== null) cargarNodos(activeCampoIdForDrawer);
+}, 10000);
+    </script>
+</body>
+</html>
